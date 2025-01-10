@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>제곱근의 뜻과 제곱근 구하기</title>
+  <!-- MathJax 라이브러리 로드 -->
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" defer></script>
+  <style>
+    body {
+      margin: 0; 
+      padding: 0; 
+      font-family: sans-serif; 
+      background: #f4f4f4;
+    }
+    .container {
+      width: 90%;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 10px;
+      background: #fff;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      min-height: 100vh;
+    }
+    h1, h2, h3 {
+      text-align: center;
+    }
+    .centered {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+    }
+    .difficulty-button {
+      margin: 5px;
+      padding: 10px 20px;
+      background: #ddd;
+      cursor: pointer;
+      border: none;
+      border-radius: 5px;
+    }
+    .difficulty-button:hover {
+      background: #bbb;
+    }
+    #gameArea {
+      display: none;
+    }
+    #energyBar {
+      width: 200px;
+      height: 20px;
+      background: #ccc;
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 5px 0;
+      position: relative;
+    }
+    #energyFill {
+      height: 100%;
+      background: #ff6666;
+      width: 100%;
+      transition: width 0.2s linear;
+    }
+    .choices button {
+      display: block;
+      margin: 10px auto;
+      padding: 10px;
+      width: 80%;
+      max-width: 300px;
+      font-size: 1em;
+      cursor: pointer;
+      border: 1px solid #999;
+      border-radius: 5px;
+      background: #eee;
+    }
+    #lives, #scoreDisplay, #timerDisplay, #totalTimeDisplay {
+      margin: 10px 0;
+      text-align: center;
+      font-weight: bold;
+    }
+    #feedback {
+      text-align: center;
+      font-weight: bold;
+      margin: 10px;
+    }
+    #response {
+      white-space: pre-wrap;
+      background: #eee;
+      padding: 6px;
+      margin: 10px 0;
+    }
+    #nameInput {
+      padding: 8px;
+      font-size: 1em;
+      border: 1px solid #aaa;
+      border-radius: 5px;
+      width: 200px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>제곱근의 뜻과 제곱근 구하기</h1>
+  <div id="welcomeScreen" class="centered">
+    <label for="nameInput">이름을 입력하세요</label>
+    <input type="text" id="nameInput" placeholder="이름" />
+    <h3>난이도를 선택하세요</h3>
+    <button class="difficulty-button" onclick="startGame('최상')">최상</button>
+    <button class="difficulty-button" onclick="startGame('상')">상</button>
+    <button class="difficulty-button" onclick="startGame('중')">중</button>
+    <button class="difficulty-button" onclick="startGame('하')">하</button>
+  </div>
+
+  <div id="gameArea">
+    <div id="lives"></div>
+    <div id="scoreDisplay"></div>
+    <div id="timerDisplay"></div>
+    <div id="energyBar">
+      <div id="energyFill"></div>
+    </div>
+    <div id="totalTimeDisplay"></div>
+    <div id="questionContainer">
+      <div id="questionText"></div>
+      <div class="choices" id="choiceButtons"></div>
+    </div>
+    <div id="feedback"></div>
+  </div>
+
+  <div id="endScreen" class="centered" style="display:none;">
+    <h2>게임 종료</h2>
+    <div id="finalScore"></div>
+    <button onclick="sendScore()">점수 전송</button>
+    <div id="response"></div>
+  </div>
+</div>
+
+<script>
+// --------------------------------------------------
+// 총 65문항 (실수 제곱근 없는 -49(#84)는 제외).
+// 아래 2가지 변경 사항 반영:
+//   1) "1의 제곱근" 문제에서 보기 중 "1, -1"을 "1"으로 수정
+//   2) "6의 제곱근"으로 바꿨던 문제를 다시 "36의 제곱근"으로 되돌림 -> 정답 ±6
+// 나머지는 모두 기존 그대로 유지
+// --------------------------------------------------
+
+const allQuestions = [
+  // 1) 1 => ±1
+  // ** 여기서 "1, -1" 보기를 "1" 으로 수정 **
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 1",
+    answer: "±1",
+    options: ["없다","±1","-1","1"]  // <-- 여기서 마지막이 "1" 으로 교체
+  },
+  // 2) 2 => ±√2
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 2",
+    answer: "\\(\\pm \\sqrt{2}\\)",
+    options: ["\\(\\pm \\sqrt{2}\\)","2, -2","\\(\\pm 2.4\\)","\\(\\pm \\sqrt{5}\\)"]
+  },
+  // 3) 3 => ±√3
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 3",
+    answer: "\\(\\pm \\sqrt{3}\\)",
+    options: ["\\(\\pm \\sqrt{3}\\)","3, -3","\\(\\pm 3.3\\)","\\(\\pm 1.7\\)"]
+  },
+  // 4) 4 => ±2
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 4",
+    answer: "±2",
+    options: ["±2","2, -1","±4","1, -1"]
+  },
+  // 5) 5 => ±√5
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 5",
+    answer: "\\(\\pm \\sqrt{5}\\)",
+    options: ["\\(\\pm \\sqrt{5}\\)","5, -5","\\(\\pm 2.4\\)","\\(\\pm 3.5\\)"]
+  },
+  // 6) (6²=36)에서 음의 제곱근 => -6
+  {
+    question: "(6²=36)에서 음의 제곱근을 구하시오.",
+    answer: "-6",
+    options: ["-6","6","\\(\\pm 6\\)","0"]
+  },
+  // 7) 7 => ±√7
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 7",
+    answer: "\\(\\pm \\sqrt{7}\\)",
+    options: ["\\(\\pm \\sqrt{7}\\)","\\(\\pm \\sqrt{3}\\)","7, -7","\\(\\pm 7.1\\)"]
+  },
+  // 8) √16의 양의 => 4
+  {
+    question: "다음 중 \\(\\sqrt{16}\\)의 양의 제곱근은?",
+    answer: "4",
+    options: ["4","2","-4","\\(\\pm 4\\)"]
+  },
+  // 9) 0 => 0
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 0",
+    answer: "0",
+    options: ["0","1, -1","-0.5, 0.5","없다"]
+  },
+  // 10) (1²=1) => ±1
+  {
+    question: "(1²=1)에서 제곱근을 모두 구하시오.",
+    answer: "±1",
+    options: ["±1","1, -1","\\(\\pm 2\\)","0"]
+  },
+  // 11) (-5)²=25 => 음의 => -5
+  {
+    question: "(-5)²=25에서 음의 제곱근을 구하시오.",
+    answer: "-5",
+    options: ["-5","5","\\(\\pm 5\\)","-25"]
+  },
+  // 12) (-9)²=81 => ±9
+  {
+    question: "(-9)²=81에서 제곱근을 모두 구하시오.",
+    answer: "±9",
+    options: ["±9","9","-9","±3"]
+  },
+  // 13) 14 => ±√14
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 14",
+    answer: "\\(\\pm \\sqrt{14}\\)",
+    options: ["\\(\\pm \\sqrt{14}\\)","14, -14","\\(\\pm 3.4\\)","\\(\\pm \\sqrt{16}\\)"]
+  },
+  // 14) 25 => ±5
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 25",
+    answer: "±5",
+    options: ["±5","25","\\(\\pm \\sqrt{25}\\)","-1"]
+  },
+  // 15) (-5)²=25 => ±5
+  {
+    question: "(-5)²=25, 제곱근을 모두 구하시오.",
+    answer: "±5",
+    options: ["±5","5","-5","±\\(\\sqrt{20}\\)"]
+  },
+  // 16) (-9)²=81 => ±9
+  {
+    question: "(-9)²=81, 제곱근을 모두 구하시오.",
+    answer: "±9",
+    options: ["±9","±\\(\\sqrt{9}\\)","9","-9"]
+  },
+  // 17) 8²=64 => ±8
+  {
+    question: "8²=64, 제곱근을 모두 구하시오.",
+    answer: "±8",
+    options: ["±8","8","-8","±4"]
+  },
+  // 18) 3²=9 => ±3
+  {
+    question: "3²=9, 제곱근을 모두 구하시오.",
+    answer: "±3",
+    options: ["±3","9","3, -4","±1"]
+  },
+  // 19) 7²=49 => ±7
+  {
+    question: "7²=49, 제곱근을 모두 구하시오.",
+    answer: "±7",
+    options: ["±7","7","-7","±49"]
+  },
+  // 20) 10²=100 => ±10
+  {
+    question: "10²=100, 제곱근을 모두 구하시오.",
+    answer: "±10",
+    options: ["±10","10","-10","±5"]
+  },
+  // 21) 4²=16 => ±4
+  {
+    question: "4²=16, 제곱근을 모두 구하시오.",
+    answer: "±4",
+    options: ["±4","4, -2","±2","16"]
+  },
+  // 22) (-7)²=49 => 양의 => 7
+  {
+    question: "(-7)²=49, 양의 제곱근은?",
+    answer: "7",
+    options: ["7","-7","±7","49"]
+  },
+  // 23) 11 => ±√11
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 11",
+    answer: "\\(\\pm \\sqrt{11}\\)",
+    options: ["\\(\\pm \\sqrt{11}\\)","±10","11, -11","\\(\\pm \\sqrt{1.1}\\)"]
+  },
+  // 24) 63 => ±√63
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 63",
+    answer: "\\(\\pm \\sqrt{63}\\)",
+    options: ["\\(\\pm \\sqrt{63}\\)","±7","±6.3","±63"]
+  },
+  // 25) 0.1 => ±√0.1
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 0.1",
+    answer: "\\(\\pm \\sqrt{0.1}\\)",
+    options: ["\\(\\pm \\sqrt{0.1}\\)","±0.01","±0.1","±1"]
+  },
+  // 26) 6.5 => ±√6.5
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 6.5",
+    answer: "\\(\\pm \\sqrt{6.5}\\)",
+    options: ["\\(\\pm \\sqrt{6.5}\\)","±6.5","\\(\\pm \\sqrt{13}\\)","-6.5"]
+  },
+  // 27) 1.44 => ±1.2
+  {
+    question: "1.44를(을) 만들 수 있는 모든 실수(제곱근)를 구하시오.",
+    answer: "±1.2",
+    options: ["±1.2","1.44","-1.2","±1.44"]
+  },
+  // 28) 0.16 => ±0.4
+  {
+    question: "0.16을(를) 만들 수 있는 모든 실수(제곱근)를 구하시오.",
+    answer: "±0.4",
+    options: ["±0.4","0.16","±0.04","-0.4"]
+  },
+  // 29) 0.0001 => ±0.01
+  {
+    question: "0.0001을(를) 만들 수 있는 모든 실수(제곱근)를 구하시오.",
+    answer: "±0.01",
+    options: ["±0.01","±0.001","0.0001","±0.1"]
+  },
+  // 30) 2.4 => ±√2.4
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 2.4",
+    answer: "\\(\\pm \\sqrt{2.4}\\)",
+    options: ["\\(\\pm \\sqrt{2.4}\\)","±2.4","\\(\\pm \\sqrt{2.5}\\)","\\(\\pm \\sqrt{24}\\)"]
+  },
+  // 31) 3/5 => 음의 => -√(3/5)
+  {
+    question: "\\(\\dfrac{3}{5}\\)의 음의 제곱근을 구하시오.",
+    answer: "-\\(\\sqrt{\\dfrac{3}{5}}\\)",
+    options: [
+      "-\\(\\sqrt{\\dfrac{3}{5}}\\)",
+      "\\(\\sqrt{\\dfrac{3}{5}}\\)",
+      "-\\(\\dfrac{3}{5}\\)",
+      "-\\(\\sqrt{\\dfrac{5}{3}}\\)"
+    ]
+  },
+  // 32) 3/2 => ±√(3/2)
+  {
+    question: "\\(\\dfrac{3}{2}\\)를(을) 만들 수 있는 모든 실수(제곱근)를 구하시오.",
+    answer: "±\\(\\sqrt{\\dfrac{3}{2}}\\)",
+    options: [
+      "±\\(\\sqrt{\\dfrac{3}{2}}\\)",
+      "±\\(\\dfrac{3}{2}\\)",
+      "±\\(\\sqrt{\\dfrac{2}{3}}\\)",
+      "-\\(\\sqrt{\\dfrac{3}{2}}\\)"
+    ]
+  },
+  // 33) (7/13)² => ±7/13
+  {
+    question: "\\(\\dfrac{49}{169}\\)을(를) 만들 수 있는 모든 실수(제곱근)를 구하시오.",
+    answer: "±\\(\\dfrac{7}{13}\\)",
+    options: [
+      "±\\(\\dfrac{7}{13}\\)",
+      "±\\(\\dfrac{13}{7}\\)",
+      "\\(\\dfrac{7}{13}\\)",
+      "-1"
+    ]
+  },
+  // 34) (1/6)² => ±1/6
+  {
+    question: "\\(\\dfrac{1}{36}\\)을(를) 만들 수 있는 모든 실수(제곱근)를 구하시오.",
+    answer: "±\\(\\dfrac{1}{6}\\)",
+    options: [
+      "±\\(\\dfrac{1}{6}\\)",
+      "\\(\\dfrac{1}{3}\\)",
+      "±\\(\\dfrac{1}{36}\\)",
+      "-6"
+    ]
+  },
+  // 35) (6/35) => ±√(6/35)
+  {
+    question: "\\(\\dfrac{6}{35}\\)의 제곱근을 근호로 나타내시오.",
+    answer: "±\\(\\sqrt{\\dfrac{6}{35}}\\)",
+    options: [
+      "±\\(\\sqrt{\\dfrac{6}{35}}\\)",
+      "±\\(\\dfrac{6}{35}\\)",
+      "\\(\\sqrt{\\dfrac{35}{6}}\\)",
+      "±\\(\\sqrt{\\dfrac{3}{7}}\\)"
+    ]
+  },
+  // 36) 36 양의 => a, (-5)² 음의 => b => a-b=11
+  {
+    question: "36의 양의 제곱근을 a, (-5)²의 음의 제곱근을 b라 할 때, a - b를 구하시오.",
+    answer: "11",
+    options: ["11","1","-11","0"]
+  },
+  // 37) 36 음의 => A, (-8)² 양의 => B => A+B=2
+  {
+    question: "36의 음의 제곱근을 A, (-8)²의 양의 제곱근을 B라 할 때, A + B를 구하시오.",
+    answer: "2",
+    options: ["2","14","-2","0"]
+  },
+  // 38) 25 양의 => x, √16 음의 => y => x-y=7
+  {
+    question: "25의 양의 제곱근을 x, \\(\\sqrt{16}\\)의 음의 제곱근을 y라 할 때, x - y를 구하시오.",
+    answer: "7",
+    options: ["7","-7","3","0"]
+  },
+  // 39) (-√16)² 음의 => A, √81 양의 => B, 제곱근25 => C => A+B+C=4
+  {
+    question: "(−\\(\\sqrt{16}\\))²의 음의 제곱근을 A, \\(\\sqrt{81}\\)의 양의 제곱근을 B, 제곱근 25를 C라 할 때, A + B + C를 구하시오.",
+    answer: "4",
+    options: ["4","-4","0","2"]
+  },
+  // 40) √16 음의 => a, 제곱근 9 => b, (-7)² 양의 => c => a+b+c=8
+  {
+    question: "\\(\\sqrt{16}\\)의 음의 제곱근을 a, 제곱근 9를 b, (-7)²의 양의 제곱근을 c라 할 때, a + b + c를 구하시오.",
+    answer: "8",
+    options: ["8","-8","2","0"]
+  },
+  // 41) 49 => ±7
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 49",
+    answer: "±7",
+    options: ["±7","7","-7","±49"]
+  },
+  // 42) 100 => ±10
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 100",
+    answer: "±10",
+    options: ["±10","10","-10","±5"]
+  },
+  // 43) 16 => ±4
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 16",
+    answer: "±4",
+    options: ["±4","±2","16","4, -1"]
+  },
+  // 44) 9 => ±3
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 9",
+    answer: "±3",
+    options: ["±3","3","-3","±9"]
+  },
+  // 45) 1 => ±1 (재등장)
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 1",
+    answer: "±1",
+    options: ["±1","1, -1","-1","0"]
+  },
+  // 46) 8²=64 => ±8
+  {
+    question: "8²=64의 제곱근을 모두 구하시오.",
+    answer: "±8",
+    options: ["±8","8","-8","±4"]
+  },
+  // 47) 36 => ±6
+  // ** 두 번째 수정: “6의 제곱근”으로 바꾼 것을 취소하고,
+  //    "36의 제곱근" 문제로 되돌려, 정답= ±6
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 36",
+    answer: "±6",
+    options: ["±6","6","-6","0"]
+  },
+  // 48) 0 => 0
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 0",
+    answer: "0",
+    options: ["0","±0","1, -1","없다"]
+  },
+  // 49) 81 => ±9
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 81",
+    answer: "±9",
+    options: ["±9","9","-9","±3"]
+  },
+  // 50) 7²=49 => ±7
+  {
+    question: "7²=49의 제곱근을 모두 구하시오.",
+    answer: "±7",
+    options: ["±7","7","-7","±49"]
+  },
+  // 51) 5²=25 => ±5
+  {
+    question: "5²=25의 제곱근을 모두 구하시오.",
+    answer: "±5",
+    options: ["±5","5","-5","±10"]
+  },
+  // 53) 121 => ±11
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 121",
+    answer: "±11",
+    options: ["±11","11","-11","±12"]
+  },
+  // 54) 36 양의 => a, (-5)² 음의 => b => a-b=11
+  {
+    question: "36의 양의 제곱근을 a, (-5)²의 음의 제곱근을 b라 할 때, a - b를 구하시오.",
+    answer: "11",
+    options: ["11","1","0","-11"]
+  },
+  {
+    question: "(−\\(\\sqrt{16}\\))²의 음의 제곱근을 A, \\(\\sqrt{81}\\)의 양의 제곱근을 B, 제곱근 25를 C라 할 때, A + B + C를 구하시오.",
+    answer: "4",
+    options: ["4","-4","0","2"]
+  },
+  {
+    question: "25의 양의 제곱근을 x, \\(\\sqrt{16}\\)의 음의 제곱근을 y라 할 때, x - y를 구하시오.",
+    answer: "7",
+    options: ["7","-7","3","0"]
+  },
+  {
+    question: "(-7)²=49의 양의 제곱근을 구하시오.",
+    answer: "7",
+    options: ["7","-7","±7","49"]
+  },
+  {
+    question: "10²=100의 제곱근을 모두 구하시오.",
+    answer: "±10",
+    options: ["±10","10","-10","±5"]
+  },
+  {
+    question: "제곱근 5를 구하시오.",
+    answer: "\\(\\sqrt{5}\\)",
+    options: ["\\(\\sqrt{5}\\)","±\\(\\sqrt{5}\\)","5","\\(\\sqrt{2.5}\\)"]
+  },
+  {
+    question: "(0.4)²=0.16의 제곱근을 모두 구하시오.",
+    answer: "±0.4",
+    options: ["±0.4","0.16","±0.04","-0.4"]
+  },
+  {
+    question: "(2.4)의 제곱근을 모두 구하시오.",
+    answer: "\\(\\pm \\sqrt{2.4}\\)",
+    options: ["\\(\\pm \\sqrt{2.4}\\)","±2.4","\\(\\pm \\sqrt{2.5}\\)","\\(\\pm \\sqrt{24}\\)"]
+  },
+  {
+    question: "36의 음의 제곱근을 A, (-8)²=64의 양의 제곱근을 B라 할 때, A + B를 구하시오.",
+    answer: "2",
+    options: ["2","14","-2","0"]
+  },
+  {
+    question: "\\(\\sqrt{16}\\)의 음의 제곱근을 a, 제곱근 9를 b, ((-7)²=49)의 양의 제곱근을 c라 할 때, a+b+c?",
+    answer: "8",
+    options: ["8","-8","2","0"]
+  },
+  {
+    question: "(−\\(\\sqrt{16}\\))²의 음의 제곱근을 A, \\(\\sqrt{81}\\)=9의 양의 제곱근을 B, 제곱근 25를 C라 할 때, A + B + C를 구하시오.",
+    answer: "4",
+    options: ["4","-4","0","2"]
+  },
+  {
+    question: "7²=49 => 제곱근을 모두 구하시오.",
+    answer: "±7",
+    options: ["±7","7","-7","±49"]
+  },
+  {
+    question: "1²=1 => 제곱근을 모두 구하시오.",
+    answer: "±1",
+    options: ["±1","1, -1","-1","0"]
+  },
+  {
+    question: "0.81의 음의 제곱근을 구하시오.",
+    answer: "-0.9",
+    options: ["-0.9","+0.9","-0.81","0"]
+  },
+  {
+    question: "(-\\(\\sqrt{16}\\))²에서 음의 제곱근을 구하시오.",
+    answer: "-4",
+    options: ["-4","4","±4","-16"]
+  },
+  {
+    question: "(\\(\\sqrt{16}\\))의 음의 제곱근을 구하시오.",
+    answer: "-2",
+    options: ["-2","2","±2","-4"]
+  },
+  {
+    question: "(25)의 양의 제곱근을 구하시오.",
+    answer: "5",
+    options: ["5","±5","-5","10"]
+  },
+  {
+    question: "(49)의 양의 제곱근을 구하시오.",
+    answer: "7",
+    options: ["7","±7","-7","49"]
+  },
+  {
+    question: "(169)의 제곱근을 모두 구하시오.",
+    answer: "±13",
+    options: ["-13","±13","±1.3","13"]
+  },
+  {
+    question: "\\(\\dfrac{1}{6}\\)의 제곱근을 모두 구하시오.",
+    answer: "±\\(\\sqrt{\\dfrac{1}{6}}\\)",
+    options: [
+      "±\\(\\sqrt{\\dfrac{1}{6}}\\)",
+      "\\(\\dfrac{1}{6}\\)",
+      "±\\(\\dfrac{6}{1}\\)",
+      "±\\(\\sqrt{\\dfrac{1}{3}}\\)"
+    ]
+  },
+  {
+    question: "0.0001 => 만들 수 있는 모든 실수(제곱근)를 구하시오.",
+    answer: "±0.01",
+    options: ["±0.01","±0.001","0.0001","±0.1"]
+  },
+  {
+    question: "((-5)²=25)의 음의 제곱근을 구하시오.",
+    answer: "-5",
+    options: ["-5","5","±5","-25"]
+  },
+  {
+    question: "(-7)²=49 => 양의 제곱근을 구하시오.",
+    answer: "7",
+    options: ["7","-7","±7","49"]
+  },
+  {
+    question: "\\(\\sqrt{100}\\)=10 => 양/음 제곱근을 모두 구하시오.",
+    answer: "±\\(\\sqrt{10}\\)",
+    options: [
+      "±\\(\\sqrt{10}\\)",
+      "±10",
+      "\\(\\sqrt{1000}\\)",
+      "-\\(\\sqrt{100}\\)"
+    ]
+  },
+  {
+    question: "(\\(\\sqrt{25}\\)=5) => 제곱근을 모두 구하시오.",
+    answer: "±5",
+    options: ["±5","5","-5","±10"]
+  },
+  {
+    question: "((−1)²=1) => 제곱근을 모두 구하시오.",
+    answer: "±1",
+    options: [
+      "±1",
+      "-1",
+      "1",
+      "없다"
+    ]
+  },
+  {
+    question: "((−9)²=81) => 제곱근을 모두 구하시오.",
+    answer: "±9",
+    options: ["±9","9","-9","±3"]
+  },
+  {
+    question: "((−5)²=25) => 제곱근을 모두 구하시오.",
+    answer: "±5",
+    options: ["±5","5","-5","±\\(\\sqrt{20}\\)"]
+  },
+  {
+    question: "((−\\(\\sqrt{16}\\))²=16)의 음의 제곱근을 A, (\\(\\sqrt{81}\\))의 양의 제곱근을 B, 제곱근25를 C라 할 때, A+B+C는?",
+    answer: "4",
+    options: ["4","-4","0","2"]
+  },
+  {
+    question: "((−7)²=49) => 제곱근을 모두 구하시오.",
+    answer: "±7",
+    options: ["±7","7","-7","±49"]
+  },
+  {
+    question: "(36)의 양의 제곱근을 a, ((-5)²=25)의 음의 제곱근을 b라 할 때, a-b?",
+    answer: "11",
+    options: ["11","1","-11","0"]
+  },
+  {
+    question: "(64=8²)의 제곱근을 모두 구하시오.",
+    answer: "±8",
+    options: ["±8","8","-8","±4"]
+  },
+  {
+    question: "((-8)²=64)의 양의 제곱근을 구하시오.",
+    answer: "8",
+    options: ["8","-8","±8","4"]
+  },
+  {
+    question: "\\(\\sqrt{16}\\)의 음의 제곱근을 a, 제곱근 9를 b, ((-7)²=49)의 양의 제곱근을 c라 할 때, a+b+c?",
+    answer: "8",
+    options: ["8","-8","2","0"]
+  },
+  // ** 두 번째 수정 반영 **
+  // 다시 "36의 제곱근"으로 되돌림, 정답 ±6
+  // (원래 "6"으로 했던 문제를 취소)
+  {
+    question: "다음 수의 제곱근을 모두 구하시오. 36",
+    answer: "±6",
+    options: [
+      "±6",
+      "6",
+      "-6",
+      "0"
+    ]
+  },
+  {
+    question: "(-4)은 (\\(\\sqrt{16}\\))의 음의 제곱근인가? (음의 제곱근을 구하시오.)",
+    answer: "-4",
+    options: ["-4","4","±4","-16"]
+  },
+  {
+    question: "((−9)²=81) => 제곱근을 모두 구하시오.",
+    answer: "±9",
+    options: ["±9","9","-9","±3"]
+  },
+  {
+    question: "1.3의 양의 제곱근을 구하시오.",
+    answer: "\\(\\sqrt{1.3}\\)",
+    options: ["\\(\\sqrt{1.3}\\)","-\\(\\sqrt{1.3}\\)","\\(\\sqrt{13}\\)","1.3"]
+  },
+  {
+    question: "((−\\(\\sqrt{16}\\))²=16)에서 음의 제곱근을 구하시오.",
+    answer: "-4",
+    options: ["-4","4","±4","-16"]
+  },
+  {
+    question: "\\(\\dfrac{9}{4}\\) => 모든 제곱근을 구하시오.",
+    answer: "±\\(\\dfrac{3}{2}\\)",
+    options: [
+      "±\\(\\dfrac{3}{2}\\)",
+      "±\\(\\dfrac{2}{3}\\)",
+      "\\(\\dfrac{3}{2}\\)",
+      "±3"
+    ]
+  },
+  {
+    question: "\\(\\sqrt{\\dfrac{9}{25}}\\) => 모든 제곱근을 구하시오.",
+    answer: "±\\(\\dfrac{3}{5}\\)",
+    options: [
+      "±\\(\\dfrac{3}{5}\\)",
+      "\\(\\dfrac{3}{5}\\)",
+      "-\\(\\dfrac{3}{5}\\)",
+      "±\\(\\dfrac{5}{3}\\)"
+    ]
+  },
+  {
+    question: "(\\(\\sqrt{36}\\))의 음의 제곱근을 구하시오.",
+    answer: "-6",
+    options: ["-6","±6","6","0"]
+  },
+  {
+    question: "25의 양의 제곱근을 x, \\(\\sqrt{16}\\)의 음의 제곱근을 y라 할 때, x-y?",
+    answer: "7",
+    options: ["7","-7","3","0"]
+  },
+  {
+    question: "((−\\(\\sqrt{16}\\))²=16)에서 -4, (\\(\\sqrt{81}\\)=9), 제곱근25=5 라고 할 때, 이 세 수의 합을 구하시오.",
+    answer: "4",
+    options: ["4","-4","0","2"]
+  },
+  {
+    question: "(169)의 제곱근을 모두 구하시오.",
+    answer: "±13",
+    options: ["-13","±13","±1.3","13"]
+  },
+  {
+    question: "((−\\(\\sqrt{16}\\))²=16)에서 음의 제곱근을 a, (다른 수들) b, c라 할 때, a+b+c=?",
+    answer: "4",
+    options: ["4","-4","0","2"]
+  },
+  {
+    question: "0.81의 음의 제곱근을 구하시오.",
+    answer: "-0.9",
+    options: ["-0.9","+0.9","-0.81","0"]
+  }
+];
+
+// 난이도별 설정
+let timeLimit = 0;        
+let scorePerQuestion = 0; 
+let lives = 3;            
+let score = 0;            
+let currentQuestionIndex = 0;
+let questionOrder = [];   
+let usedIndices = new Set();
+let intervalId = null;    
+let energyInterval = null;
+let totalStartTime = 0;   
+let nameValue = "";
+let gameInProgress = false;
+let totalTimerId = null;  
+let elapsedTime = 0;      
+
+function shuffleArray(arr) {
+  for(let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i+1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+function startGame(difficulty) {
+  nameValue = document.getElementById('nameInput').value.trim();
+  if(!nameValue){
+    alert("이름을 입력해주세요.");
+    return;
+  }
+  switch(difficulty) {
+    case "최상":
+      timeLimit = 15;
+      scorePerQuestion = 20;
+      break;
+    case "상":
+      timeLimit = 23;
+      scorePerQuestion = 15;
+      break;
+    case "중":
+      timeLimit = 30;
+      scorePerQuestion = 13;
+      break;
+    case "하":
+      timeLimit = 0;
+      scorePerQuestion = 10;
+      break;
+  }
+
+  document.getElementById('welcomeScreen').style.display = "none";
+  document.getElementById('gameArea').style.display = "block";
+  document.getElementById('endScreen').style.display = "none";
+
+  lives = 3;
+  score = 0;
+  currentQuestionIndex = 0;
+  usedIndices.clear();
+
+  // 전체 문항을 무작위 순서로
+  questionOrder = [...Array(allQuestions.length).keys()];
+  shuffleArray(questionOrder);
+
+  totalStartTime = Date.now();
+  if(totalTimerId) clearInterval(totalTimerId);
+  totalTimerId = setInterval(()=>{
+    const now = Date.now();
+    elapsedTime = Math.floor((now - totalStartTime)/1000);
+    document.getElementById('totalTimeDisplay').innerText = 
+      "전체 경과 시간: " + elapsedTime + "초";
+  }, 1000);
+
+  gameInProgress = true;
+  updateUI();
+  loadNextQuestion();
+}
+
+function updateUI(){
+  document.getElementById('lives').innerText = "남은 기회 : " + lives;
+  document.getElementById('scoreDisplay').innerText = "점수 : " + score;
+  if(timeLimit === 0){
+    document.getElementById('timerDisplay').innerText = "시간 제한 없음";
+    document.getElementById('energyBar').style.display = "none";
+  } else {
+    document.getElementById('timerDisplay').innerText = 
+      "남은 시간(문제별) : 제한 "+timeLimit+"초";
+    document.getElementById('energyBar').style.display = "block";
+  }
+}
+
+function loadNextQuestion(){
+  if(lives <= 0 || currentQuestionIndex >= allQuestions.length){
+    endGame();
+    return;
+  }
+  const qIndex = questionOrder[currentQuestionIndex];
+  currentQuestionIndex++;
+
+  const questionObj = allQuestions[qIndex];
+  let choices = [...questionObj.options];
+  shuffleArray(choices);
+
+  document.getElementById('questionText').innerHTML = "<p>"+questionObj.question+"</p>";
+  const choiceButtons = document.getElementById('choiceButtons');
+  choiceButtons.innerHTML = "";
+  choices.forEach((c)=>{
+    const btn = document.createElement('button');
+    btn.innerHTML = c;
+    btn.addEventListener('click', ()=>{checkAnswer(questionObj, c);});
+    choiceButtons.appendChild(btn);
+  });
+
+  document.getElementById('feedback').innerText = "";
+  MathJax.typeset();
+
+  // 문제별 시간/에너지바
+  if(timeLimit > 0){
+    if(intervalId) clearInterval(intervalId);
+    if(energyInterval) clearInterval(energyInterval);
+
+    let remaining = timeLimit;
+    document.getElementById('energyFill').style.width = "100%";
+
+    intervalId = setInterval(()=>{
+      remaining--;
+      if(remaining <= 0){
+        clearInterval(intervalId);
+        timeOutHandler(); 
+      }
+    },1000);
+
+    energyInterval = setInterval(()=>{
+      const percent = (remaining / timeLimit)*100;
+      document.getElementById('energyFill').style.width = percent+"%";
+    },200);
+  }
+}
+
+function timeOutHandler(){
+  lives--;
+  document.getElementById('feedback').innerText = 
+    "시간 초과! 다음 문제로 넘어갑니다.";
+  updateUI();
+  setTimeout(()=>{
+    loadNextQuestion();
+  },1000);
+}
+
+function checkAnswer(questionObj, chosen){
+  if(!gameInProgress) return;
+  if(intervalId) clearInterval(intervalId);
+  if(energyInterval) clearInterval(energyInterval);
+
+  if(chosen === questionObj.answer){
+    score += scorePerQuestion;
+    document.getElementById('feedback').innerText = "정답입니다!";
+  } else {
+    lives--;
+    document.getElementById('feedback').innerText = 
+      "틀렸습니다. 정답은 ["+questionObj.answer+"] 입니다.";
+  }
+  updateUI();
+
+  if(lives <= 0){
+    setTimeout(()=>{ endGame(); },1000);
+  } else {
+    setTimeout(()=>{ loadNextQuestion(); },1000);
+  }
+}
+
+function endGame(){
+  gameInProgress = false;
+  if(intervalId) clearInterval(intervalId);
+  if(energyInterval) clearInterval(energyInterval);
+  if(totalTimerId) clearInterval(totalTimerId);
+
+  document.getElementById('gameArea').style.display = "none";
+  document.getElementById('endScreen').style.display = "block";
+  document.getElementById('finalScore').innerText = 
+    "최종 점수: " + score + "점, 걸린 시간: " + elapsedTime + "초";
+}
+
+// 점수 전송
+function sendScore(){
+  saveData("제곱근의 뜻과 제곱근 구하기", nameValue, score, elapsedTime);
+}
+
+// 서버 전송 코드
+async function saveData(game, name, score, elapsedTime) {
+  const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+
+  const requestData = {
+    game,
+    name,
+    score: parseInt(score, 10),
+    elapsedTime: parseInt(elapsedTime, 10)
+  };
+
+  try {
+    const response = await fetch(FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestData)
+    });
+
+    const responseData = await response.json();
+
+    if(response.ok){
+      document.getElementById('response').innerText = 
+        `성공: ${JSON.stringify(responseData, null, 2)}`;
+    } else {
+      document.getElementById('response').innerText = 
+        `오류: ${JSON.stringify(responseData, null, 2)}`;
+    }
+  } catch(error) {
+    console.error('요청 실패:', error);
+    document.getElementById('response').innerText = 
+      `네트워크 오류: ${error.message}`;
+  }
+}
+</script>
+</body>
+</html>
